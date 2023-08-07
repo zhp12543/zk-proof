@@ -1,15 +1,14 @@
 package mta
 
 import (
-	"github.com/zhp12543/zk-proof/curve"
-	"github.com/zhp12543/zk-proof/cmt"
-	"github.com/zhp12543/zk-proof/paillier"
-	"github.com/zhp12543/zk-proof/prime"
 	"crypto/elliptic"
 	"errors"
 	"fmt"
+	"github.com/zhp12543/zk-proof/cmt"
+	"github.com/zhp12543/zk-proof/curve"
+	"github.com/zhp12543/zk-proof/paillier"
+	"github.com/zhp12543/zk-proof/prime"
 	"math/big"
-
 )
 
 const (
@@ -171,4 +170,29 @@ func (pf *RangeProofAlice) Bytes() [RangeProofAliceBytesParts][]byte {
 		pf.S1.Bytes(),
 		pf.S2.Bytes(),
 	}
+}
+
+func (pf *RangeProofAlice) Flat() []*big.Int {
+	return []*big.Int{
+		pf.Z,
+		pf.U,
+		pf.W,
+		pf.S,
+		pf.S1,
+		pf.S2,
+	}
+}
+
+func RangeProofAliceUnFlat(in []*big.Int) (*RangeProofAlice, error) {
+	if len(in) != RangeProofAliceBytesParts {
+		return nil, fmt.Errorf("expected %d big.Int parts to construct RangeProofAlice", RangeProofAliceBytesParts)
+	}
+	return &RangeProofAlice{
+		Z:  in[0],
+		U:  in[1],
+		W:  in[2],
+		S:  in[3],
+		S1: in[4],
+		S2: in[5],
+	}, nil
 }
