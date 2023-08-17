@@ -1,3 +1,9 @@
+// Copyright © 2019 Binance
+//
+// This file is part of Binance. The full Binance copyright notice, including
+// terms governing use, modification, and redistribution, is contained in the
+// file LICENSE at the root of the source code distribution tree.
+
 package mta
 
 import (
@@ -17,6 +23,7 @@ const (
 
 var (
 	zero = big.NewInt(0)
+	one  = big.NewInt(1)
 )
 
 type (
@@ -107,6 +114,28 @@ func (pf *RangeProofAlice) Verify(ec elliptic.Curve, pk *paillier.PublicKey, NTi
 	q3 := new(big.Int).Mul(q, q)
 	q3 = new(big.Int).Mul(q, q3)
 
+	if !prime.IsInInterval(pf.Z, NTilde) {
+		return false
+	}
+	if !prime.IsInInterval(pf.U, pk.NSquare()) {
+		return false
+	}
+	if !prime.IsInInterval(pf.W, NTilde) {
+		return false
+	}
+	if !prime.IsInInterval(pf.S, pk.N) {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.Z, NTilde).Cmp(one) != 0 {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.U, pk.NSquare()).Cmp(one) != 0 {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.W, NTilde).Cmp(one) != 0 {
+		return false
+	}
+
 	// 3.
 	if pf.S1.Cmp(q3) == 1 {
 		return false
@@ -170,29 +199,4 @@ func (pf *RangeProofAlice) Bytes() [RangeProofAliceBytesParts][]byte {
 		pf.S1.Bytes(),
 		pf.S2.Bytes(),
 	}
-}
-
-func (pf *RangeProofAlice) Flat() []*big.Int {
-	return []*big.Int{
-		pf.Z,
-		pf.U,
-		pf.W,
-		pf.S,
-		pf.S1,
-		pf.S2,
-	}
-}
-
-func RangeProofAliceUnFlat(in []*big.Int) (*RangeProofAlice, error) {
-	if len(in) != RangeProofAliceBytesParts {
-		return nil, fmt.Errorf("expected %d big.Int parts to construct RangeProofAlice", RangeProofAliceBytesParts)
-	}
-	return &RangeProofAlice{
-		Z:  in[0],
-		U:  in[1],
-		W:  in[2],
-		S:  in[3],
-		S1: in[4],
-		S2: in[5],
-	}, nil
 }

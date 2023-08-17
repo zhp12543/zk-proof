@@ -12,10 +12,10 @@
 package dln
 
 import (
-	"github.com/zhp12543/zk-proof/curve"
-	"github.com/zhp12543/zk-proof/cmt"
-	"github.com/zhp12543/zk-proof/prime"
 	"fmt"
+	"github.com/zhp12543/zk-proof/cmt"
+	"github.com/zhp12543/zk-proof/curve"
+	"github.com/zhp12543/zk-proof/prime"
 	"math/big"
 )
 
@@ -26,6 +26,10 @@ type (
 		Alpha,
 		T [Iterations]*big.Int
 	}
+)
+
+var (
+	one = big.NewInt(1)
 )
 
 func NewDLNProof(h1, h2, x, p, q, N *big.Int) *Proof {
@@ -53,7 +57,33 @@ func (p *Proof) Verify(h1, h2, N *big.Int) bool {
 	if p == nil {
 		return false
 	}
+	if N.Sign() != 1 {
+		return false
+	}
 	modN := prime.ModInt(N)
+	h1_ := new(big.Int).Mod(h1, N)
+	if h1_.Cmp(one) != 1 || h1_.Cmp(N) != -1 {
+		return false
+	}
+	h2_ := new(big.Int).Mod(h2, N)
+	if h2_.Cmp(one) != 1 || h2_.Cmp(N) != -1 {
+		return false
+	}
+	if h1_.Cmp(h2_) == 0 {
+		return false
+	}
+	for i := range p.T {
+		a := new(big.Int).Mod(p.T[i], N)
+		if a.Cmp(one) != 1 || a.Cmp(N) != -1 {
+			return false
+		}
+	}
+	for i := range p.Alpha {
+		a := new(big.Int).Mod(p.Alpha[i], N)
+		if a.Cmp(one) != 1 || a.Cmp(N) != -1 {
+			return false
+		}
+	}
 	msg := append([]*big.Int{h1, h2, N}, p.Alpha[:]...)
 	c := cmt.SHA512_256i(msg...)
 	cIBI := new(big.Int)

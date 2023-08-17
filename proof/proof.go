@@ -7,17 +7,15 @@
 package proof
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/zhp12543/zk-proof/curve"
-	"github.com/zhp12543/zk-proof/dln"
 	"github.com/zhp12543/zk-proof/paillier"
 	"github.com/zhp12543/zk-proof/prime"
 	"math/big"
 	"runtime"
-	"sync"
 	"time"
-
 )
 
 const (
@@ -32,7 +30,18 @@ const (
 // GeneratePreParams finds two safe primes and computes the Paillier secret required for the protocol.
 // This can be a time consuming process so it is recommended to do it out-of-band.
 // If not specified, a concurrency value equal to the number of available CPU cores will be used.
+// If pre-parameters could not be generated before the timeout, an error is returned.
 func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*PaillierParams, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return GeneratePreParamsWithContext(ctx, optionalConcurrency...)
+}
+
+// GeneratePreParams finds two safe primes and computes the Paillier secret required for the protocol.
+// This can be a time consuming process so it is recommended to do it out-of-band.
+// If not specified, a concurrency value equal to the number of available CPU cores will be used.
+// If pre-parameters could not be generated before the context is done, an error is returned.
+func GeneratePreParamsWithContext(ctx context.Context, optionalConcurrency ...int) (*PaillierParams, error) {
 	var concurrency int
 	if 0 < len(optionalConcurrency) {
 		if 1 < len(optionalConcurrency) {
@@ -52,10 +61,10 @@ func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*Pail
 
 	// 4. generate Paillier public key E_i, private key and proof
 	go func(ch chan<- *paillier.PrivateKey) {
-		fmt.Printf("generating the Paillier modulus, please wait...")
+		fmt.Println("generating the Paillier modulus, please wait...")
 		start := time.Now()
 		// more concurrency weight is assigned here because the paillier primes have a requirement of having "large" P-Q
-		PiPaillierSk, _, err := paillier.GenerateKeyPair(paillierModulusLen, timeout, concurrency*2)
+		PiPaillierSk, _, err := paillier.GenerateKeyPair(ctx, paillierModulusLen, concurrency*2)
 		if err != nil {
 			ch <- nil
 			return
@@ -67,9 +76,9 @@ func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*Pail
 	// 5-7. generate safe primes for ZKPs used later on
 	go func(ch chan<- []*prime.GermainSafePrime) {
 		var err error
-		fmt.Printf("generating the safe primes for the signing proofs, please wait...")
+		fmt.Println("generating the safe primes for the signing proofs, please wait...")
 		start := time.Now()
-		sgps, err := prime.GetRandomSafePrimesConcurrent(safePrimeBitLen, 2, timeout, concurrency)
+		sgps, err := prime.GetRandomSafePrimesConcurrent(ctx, safePrimeBitLen, 2, concurrency)
 		if err != nil {
 			ch <- nil
 			return
@@ -88,7 +97,7 @@ consumer:
 	for {
 		select {
 		case <-logProgressTicker.C:
-			fmt.Printf("still generating primes...")
+			fmt.Println("still generating primes...")
 		case sgps = <-sgpCh:
 			if sgps == nil ||
 				sgps[0] == nil || sgps[1] == nil ||
@@ -133,78 +142,4 @@ consumer:
 		Q:          q,
 	}
 	return preParams, nil
-}
-
-func (pk *PaillierParams) VerifyDln( dln1 [][]byte, dln2 [][]byte) error {
-	errChain := make(chan error, 0)
-	doneChain := make(chan struct{}, 0)
-
-	wg := new(sync.WaitGroup)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		dlnProof1, err := dln.UnmarshalDLNProof(dln1)
-		if err != nil {
-			errChain <- err
-			return
-		}
-
-		if !dlnProof1.Verify(pk.H1i, pk.H2i, pk.NTildei) {
-			errChain <- errors.New("dln1 verify false")
-			return
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		dlnProof2, err := dln.UnmarshalDLNProof(dln2)
-		if err != nil {
-			errChain <- err
-			return
-		}
-
-		if !dlnProof2.Verify(pk.H2i, pk.H1i, pk.NTildei) {
-			errChain <- errors.New("dln2 verify false")
-			return
-		}
-	}()
-
-	go func() {
-		wg.Wait()
-		close(doneChain)
-	}()
-
-	select {
-	case err := <-errChain:
-		return err
-	case <-doneChain:
-		return nil
-	}
-}
-
-func (pk *PaillierParams) DlnProof() ([][]byte, [][]byte, error) {
-	dln1, err := dln.NewDLNProof(
-		pk.H1i,
-		pk.H2i,
-		pk.Alpha,
-		pk.P,
-		pk.Q,
-		pk.NTildei).Serialize()
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	dln2, err := dln.NewDLNProof(
-		pk.H2i,
-		pk.H1i,
-		pk.Beta,
-		pk.P,
-		pk.Q,
-		pk.NTildei).Serialize()
-
-	if err != nil {
-		return nil, nil, err
-	}
-	return dln1, dln2, nil
 }

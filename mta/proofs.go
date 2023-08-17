@@ -35,11 +35,7 @@ type (
 
 // ProveBobWC implements Bob's proof both with or without check "ProveMtawc_Bob" and "ProveMta_Bob" used in the MtA protocol from GG18Spec (9) Figs. 10 & 11.
 // an absent `X` generates the proof without the X consistency check X = g^x
-func ProveBobWC(
-	ec elliptic.Curve,
-	pk *paillier.PublicKey,
-	NTilde, h1, h2, c1, c2, x, y, r *big.Int,
-	X *curve.ECPoint) (*ProofBobWC, error) {
+func ProveBobWC(ec elliptic.Curve, pk *paillier.PublicKey, NTilde, h1, h2, c1, c2, x, y, r *big.Int, X *curve.ECPoint) (*ProofBobWC, error) {
 	if pk == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil || x == nil || y == nil || r == nil {
 		return nil, errors.New("ProveBob() received a nil argument")
 	}
@@ -49,6 +45,8 @@ func ProveBobWC(
 	q := ec.Params().N
 	q3 := new(big.Int).Mul(q, q)
 	q3 = new(big.Int).Mul(q, q3)
+	q7 := new(big.Int).Mul(q3, q3)
+	q7 = new(big.Int).Mul(q7, q)
 	qNTilde := new(big.Int).Mul(q, NTilde)
 	q3NTilde := new(big.Int).Mul(q3, NTilde)
 
@@ -59,14 +57,15 @@ func ProveBobWC(
 	// 2.
 	rho := curve.GetRandomPositiveInt(qNTilde)
 	sigma := curve.GetRandomPositiveInt(qNTilde)
-	tau := curve.GetRandomPositiveInt(qNTilde)
+	tau := curve.GetRandomPositiveInt(q3NTilde)
 
 	// 3.
 	rhoPrm := curve.GetRandomPositiveInt(q3NTilde)
 
 	// 4.
 	beta := curve.GetRandomPositiveRelativelyPrimeInt(pk.N)
-	gamma := curve.GetRandomPositiveRelativelyPrimeInt(pk.N)
+
+	gamma := curve.GetRandomPositiveInt(q7)
 
 	// 5.
 	u := curve.NewECPointNoCurveCheck(ec, zero, zero) // initialization suppresses an IDE warning
@@ -195,11 +194,64 @@ func (pf *ProofBobWC) Verify(ec elliptic.Curve, pk *paillier.PublicKey, NTilde, 
 	}
 
 	q := ec.Params().N
-	q3 := new(big.Int).Mul(q, q)
-	q3 = new(big.Int).Mul(q, q3)
+	q3 := new(big.Int).Mul(q, q)   // q^2
+	q3 = new(big.Int).Mul(q, q3)   // q^3
+	q7 := new(big.Int).Mul(q3, q3) // q^6
+	q7 = new(big.Int).Mul(q7, q)   // q^7
+
+	if !prime.IsInInterval(pf.Z, NTilde) {
+		return false
+	}
+	if !prime.IsInInterval(pf.ZPrm, NTilde) {
+		return false
+	}
+	if !prime.IsInInterval(pf.T, NTilde) {
+		return false
+	}
+	if !prime.IsInInterval(pf.V, pk.NSquare()) {
+		return false
+	}
+	if !prime.IsInInterval(pf.W, NTilde) {
+		return false
+	}
+	if !prime.IsInInterval(pf.S, pk.N) {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.Z, NTilde).Cmp(one) != 0 {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.ZPrm, NTilde).Cmp(one) != 0 {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.T, NTilde).Cmp(one) != 0 {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.V, pk.NSquare()).Cmp(one) != 0 {
+		return false
+	}
+	if new(big.Int).GCD(nil, nil, pf.W, NTilde).Cmp(one) != 0 {
+		return false
+	}
+
+	gcd := big.NewInt(0)
+	if pf.S.Cmp(zero) == 0 {
+		return false
+	}
+	if gcd.GCD(nil, nil, pf.S, pk.N).Cmp(one) != 0 {
+		return false
+	}
+	if pf.V.Cmp(zero) == 0 {
+		return false
+	}
+	if gcd.GCD(nil, nil, pf.V, pk.N).Cmp(one) != 0 {
+		return false
+	}
 
 	// 3.
 	if pf.S1.Cmp(q3) > 0 {
+		return false
+	}
+	if pf.T1.Cmp(q7) > 0 {
 		return false
 	}
 
@@ -320,64 +372,4 @@ func (pf *ProofBobWC) Bytes() [ProofBobWCBytesParts][]byte {
 	bobBzsSlice = append(bobBzsSlice, pf.U.Y().Bytes())
 	copy(out[:], bobBzsSlice[:12])
 	return out
-}
-
-func (pf *ProofBob) Flat() []*big.Int {
-	return []*big.Int{
-		pf.Z,
-		pf.ZPrm,
-		pf.T,
-		pf.V,
-		pf.W,
-		pf.S,
-		pf.S1,
-		pf.S2,
-		pf.T1,
-		pf.T2,
-	}
-}
-
-func ProofBobUnFlat(in []*big.Int) (*ProofBob, error) {
-	if len(in) != ProofBobBytesParts && len(in) != ProofBobWCBytesParts {
-		return nil, fmt.Errorf(
-			"expected %d big.Int parts to construct ProofBob, or %d for ProofBobWC",
-			ProofBobBytesParts, ProofBobWCBytesParts)
-	}
-	return &ProofBob{
-		Z:    in[0],
-		ZPrm: in[1],
-		T:    in[2],
-		V:    in[3],
-		W:    in[4],
-		S:    in[5],
-		S1:   in[6],
-		S2:   in[7],
-		T1:   in[8],
-		T2:   in[9],
-	}, nil
-}
-
-func (pf *ProofBobWC) Flat() []*big.Int {
-	out := make([]*big.Int, 0)
-	pb := pf.ProofBob.Flat()
-	out = append(pb, pf.U.X())
-	out = append(out, pf.U.Y())
-	return out
-}
-
-func ProofBobWCUnFlat(ec elliptic.Curve, in []*big.Int) (*ProofBobWC, error) {
-	proofBob, err := ProofBobUnFlat(in)
-	if err != nil {
-		return nil, err
-	}
-	point, err := curve.NewECPoint(ec,
-		in[10],
-		in[11])
-	if err != nil {
-		return nil, err
-	}
-	return &ProofBobWC{
-		ProofBob: proofBob,
-		U:        point,
-	}, nil
 }
