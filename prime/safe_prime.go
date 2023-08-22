@@ -321,7 +321,7 @@ func runGenPrimeRoutine(
 					break
 				}
 
-				fmt.Println("runGenPrimeRoutine gen pq ", q, p, q.BitLen() == qBitLen, q.ProbablyPrime(20), isPocklingtonCriterionSatisfied(p)  )
+				//fmt.Println("runGenPrimeRoutine gen pq ", q, p, q.BitLen() == qBitLen, q.ProbablyPrime(20), isPocklingtonCriterionSatisfied(p)  )
 				// There is a tiny possibility that, by adding delta, we caused
 				// the number to be one bit too long. Thus we check BitLen
 				// here.
