@@ -148,9 +148,11 @@ func GetRandomSafePrimesConcurrent(ctx context.Context, bitLen, numPrimes int, c
 
 	for i := 0; i < concurrency; i++ {
 		waitGroup.Add(1)
+		fmt.Println("runGenPrimeRoutine :", i)
 		runGenPrimeRoutine(
 			generatorCtx, primeCh, errCh, waitGroup, rand.Reader, bitLen,
 		)
+		fmt.Println("runGenPrimeRoutine end:", i)
 	}
 
 	needed := int32(numPrimes)
@@ -226,6 +228,12 @@ func runGenPrimeRoutine(
 
 	go func() {
 		defer waitGroup.Done()
+
+		defer func() {
+			if err := recover(); err != nil {
+				errCh <- fmt.Errorf("%+v", err)
+			}
+		}()
 
 		for {
 			select {
