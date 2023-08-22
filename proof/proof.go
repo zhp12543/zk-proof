@@ -74,7 +74,7 @@ func GeneratePreParamsWithContext(ctx context.Context, optionalConcurrency ...in
 	}(paiCh)
 
 	// 5-7. generate safe primes for ZKPs used later on
-	go func(ch chan<- []*prime.GermainSafePrime) {
+	/*go func(ch chan<- []*prime.GermainSafePrime) {
 		var err error
 		fmt.Println("generating the safe primes for the signing proofs, please wait...")
 		start := time.Now()
@@ -85,13 +85,22 @@ func GeneratePreParamsWithContext(ctx context.Context, optionalConcurrency ...in
 		}
 		fmt.Printf("safe primes generated. took %s\n", time.Since(start))
 		ch <- sgps
-	}(sgpCh)
+	}(sgpCh)*/
+
+	var err error
+	fmt.Println("generating the safe primes for the signing proofs, please wait...")
+	start := time.Now()
+	sgps, err := prime.GetRandomSafePrimesConcurrent(ctx, safePrimeBitLen, 2, concurrency)
+	if err != nil {
+		return nil, errors.New("")
+	}
+	fmt.Printf("safe primes generated. took %s\n", time.Since(start))
 
 	// this ticker will print a log statement while the generating is still in progress
 	logProgressTicker := time.NewTicker(logProgressTickInterval)
 
 	// errors can be thrown in the following code; consume chans to end goroutines here
-	var sgps []*prime.GermainSafePrime
+	//var sgps []*prime.GermainSafePrime
 	var paiSK *paillier.PrivateKey
 consumer:
 	for {
