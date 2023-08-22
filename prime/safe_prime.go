@@ -320,6 +320,7 @@ func runGenPrimeRoutine(
 					break
 				}
 
+				fmt.Println("runGenPrimeRoutine gen pq ")
 				// There is a tiny possibility that, by adding delta, we caused
 				// the number to be one bit too long. Thus we check BitLen
 				// here.
