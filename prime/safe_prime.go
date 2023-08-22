@@ -8,7 +8,7 @@ package prime
 
 import (
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -150,7 +150,7 @@ func GetRandomSafePrimesConcurrent(ctx context.Context, bitLen, numPrimes int, c
 		waitGroup.Add(1)
 		fmt.Println("runGenPrimeRoutine :", i)
 		runGenPrimeRoutine(
-			generatorCtx, primeCh, errCh, waitGroup, rand.Reader, bitLen,
+			generatorCtx, primeCh, errCh, waitGroup, crand.Reader, bitLen,
 		)
 		fmt.Println("runGenPrimeRoutine end:", i)
 	}
@@ -163,9 +163,7 @@ func GetRandomSafePrimesConcurrent(ctx context.Context, bitLen, numPrimes int, c
 			if atomic.AddInt32(&needed, -1) <= 0 {
 				return primes[:numPrimes], nil
 			}
-			fmt.Println("gen primes count:", len(primes))
 		case err := <-errCh:
-			fmt.Println("get primes err:", err)
 			return nil, err
 		case <-ctx.Done():
 			return nil, ErrGeneratorCancelled
@@ -217,68 +215,33 @@ func runGenPrimeRoutine(
 	pBitLen int,
 ) {
 	qBitLen := pBitLen - 1
-	b := uint(qBitLen % 8)
-	if b == 0 {
-		b = 8
-	}
-
-	bytes := make([]byte, (qBitLen+7)/8)
 	p := new(big.Int)
 	q := new(big.Int)
+	var err error
 
 	bigMod := new(big.Int)
 
 	go func() {
 		defer waitGroup.Done()
 
-		defer func() {
-			if err := recover(); err != nil {
-				errCh <- fmt.Errorf("%+v", err)
-			}
-		}()
-
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				_, err := io.ReadFull(rand, bytes)
+				// Calculate the value mod the product of smallPrimes. If it's
+				// a multiple of any of these primes we add two until it isn't.
+				// The probability of overflowing is minimal and can be ignored
+				// because we still perform Miller-Rabin tests on the result.
+				q, err = crand.Prime(rand, qBitLen)
 				if err != nil {
 					errCh <- err
 					return
 				}
 
-				// Clear bits in the first byte to make sure the candidate has
-				// a size <= bits.
-				bytes[0] &= uint8(int(1<<b) - 1)
-				// Don't let the value be too small, i.e, set the most
-				// significant two bits.
-				// Setting the top two bits, rather than just the top bit,
-				// means that when two of these values are multiplied together,
-				// the result isn't ever one bit short.
-				if b >= 2 {
-					bytes[0] |= 3 << (b - 2)
-				} else {
-					// Here b==1, because b cannot be zero.
-					bytes[0] |= 1
-					if len(bytes) > 1 {
-						bytes[1] |= 0x80
-					}
-				}
-				// Make the value odd since an even number this large certainly
-				// isn't prime.
-				bytes[len(bytes)-1] |= 1
-
-				q.SetBytes(bytes)
-
-				// Calculate the value mod the product of smallPrimes. If it's
-				// a multiple of any of these primes we add two until it isn't.
-				// The probability of overflowing is minimal and can be ignored
-				// because we still perform Miller-Rabin tests on the result.
 				bigMod.Mod(q, smallPrimesProduct)
 				mod := bigMod.Uint64()
 
-				fmt.Println("q.ProbablyPrime(20)", q.ProbablyPrime(20))
 			NextDelta:
 				for delta := uint64(0); delta < 1<<20; delta += 2 {
 					m := mod + delta
