@@ -278,6 +278,7 @@ func runGenPrimeRoutine(
 				bigMod.Mod(q, smallPrimesProduct)
 				mod := bigMod.Uint64()
 
+				fmt.Println("q.ProbablyPrime(20)", q.ProbablyPrime(20))
 			NextDelta:
 				for delta := uint64(0); delta < 1<<20; delta += 2 {
 					m := mod + delta
