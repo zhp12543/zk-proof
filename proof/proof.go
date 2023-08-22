@@ -66,6 +66,7 @@ func GeneratePreParamsWithContext(ctx context.Context, optionalConcurrency ...in
 		// more concurrency weight is assigned here because the paillier primes have a requirement of having "large" P-Q
 		PiPaillierSk, _, err := paillier.GenerateKeyPair(ctx, paillierModulusLen, concurrency*2)
 		if err != nil {
+			fmt.Println("generation paillier err:", err)
 			ch <- nil
 			return
 		}
@@ -92,7 +93,8 @@ func GeneratePreParamsWithContext(ctx context.Context, optionalConcurrency ...in
 	start := time.Now()
 	sgps, err := prime.GetRandomSafePrimesConcurrent(ctx, safePrimeBitLen, 2, concurrency)
 	if err != nil {
-		return nil, errors.New("")
+		fmt.Println("safe primes gen err", err)
+		return nil, errors.New("12345678")
 	}
 	fmt.Printf("safe primes generated. took %s\n", time.Since(start))
 

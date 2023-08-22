@@ -163,7 +163,9 @@ func GetRandomSafePrimesConcurrent(ctx context.Context, bitLen, numPrimes int, c
 			if atomic.AddInt32(&needed, -1) <= 0 {
 				return primes[:numPrimes], nil
 			}
+			fmt.Println("gen primes count:", len(primes))
 		case err := <-errCh:
+			fmt.Println("get primes err:", err)
 			return nil, err
 		case <-ctx.Done():
 			return nil, ErrGeneratorCancelled
